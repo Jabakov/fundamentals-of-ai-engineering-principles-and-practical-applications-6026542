@@ -16,7 +16,14 @@ class SemanticSearchEngine:
         # - Initialize the embedding model
         # - Create empty data structures for document storage
         # - Initialize a cache for query embeddings
-        pass
+        self.model = SentenceTransformer(model_name)
+        
+        self.documents = []
+        
+        self.embedding_cache = {}
+        self.cache_hits = 0
+        self.cache_misses = 0
+        
 
     def add_documents(self, documents: List[Dict[str, str]], batch_size: int = 32) -> None:
         """
@@ -30,7 +37,19 @@ class SemanticSearchEngine:
         # - Process documents in batches of the specified size
         # - Generate embeddings for each batch
         # - Store documents with their embeddings in your data structure
-        pass
+        
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i:i+batch_size]
+            batch_contents = [doc['content'] for doc in batch]
+            
+            batch_embeddings = self.model.encode(batch_contents)
+            
+            for j, embedding in enumerate(batch_embeddings):
+                self.documents.append({
+                    'id':batch[j]['id'],
+                    'content':batch[j]['content'],
+                    'embedding': embedding
+                })
 
     def _get_embedding(self, text: str) -> List[float]:
         """
@@ -48,7 +67,17 @@ class SemanticSearchEngine:
         # - If it does, increment cache hit counter and return cached embedding
         # - If not, generate the embedding, cache it, increment cache miss counter
         # - Return the embedding
-        pass
+        
+        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+        
+        if text_hash in self.embedding_cache:
+            self.cache_hits += 1
+            return self.embedding_cache[text_hash]
+        
+        self.cache_misses += 1
+        embedding = self.model.encode(text)
+        self.embedding_cache[text_hash] = embedding
+        return embedding
 
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, any]]:
         """
@@ -66,7 +95,20 @@ class SemanticSearchEngine:
         # - Calculate similarity between query and all documents
         # - Sort the results by similarity score in descending order
         # - Return top_k results with their scores and document data
-        pass
+        
+        query_embedding = self._get_embedding(query)
+        
+        results = []
+        for doc in self.documents:
+            similarity = util.cos_sim([query_embedding], [doc['embedding']])[0][0]
+            results.append({
+                'id': doc['id'],
+                'content': doc['content'],
+                'score': float(similarity)
+            })
+            
+        results.sort(key=lambda x: x['score'], reverse=True)
+        return results[:top_k]
 
     def get_cache_stats(self) -> Dict[str, any]:
         """
@@ -79,7 +121,16 @@ class SemanticSearchEngine:
         # - Calculate total cache accesses
         # - Calculate hit rate percentage
         # - Return a dictionary with hits, misses, total, and hit rate
-        pass
+        total = self.cache_hits + self.cache_misses
+        hit_rate = (self.cache_hits / total * 100) if total > 0 else 0
+        
+        return {
+            'hits': self.cache_hits,
+            'misses': self.cache_misses,
+            'total': total,
+            'hit_rate_percent': hit_rate
+        }
+        
 
 
 # Example usage
